@@ -3,7 +3,11 @@
 #include <vector>
 #include <string>
 #include <limits>
+#include <cstdlib> //for random number gen
+#include <sys/time.h>
 #include "include/chess.hpp"
+
+#define DEPTH 3
 
 // namespace
 using namespace chess;
@@ -18,6 +22,8 @@ namespace std {
 }
 using namespace std;
 
+int numEvals = 0;
+
 // piece values
 std::unordered_map<chess::PieceType, int> pieceMap = {
         {chess::PieceType::KING, 0},
@@ -27,6 +33,13 @@ std::unordered_map<chess::PieceType, int> pieceMap = {
         {chess::PieceType::BISHOP, 3},
         {chess::PieceType::ROOK, 5}
 };
+
+double get_clock(){
+	struct timeval tv; int ok;
+	ok = gettimeofday(&tv, (void *) 0);
+	if (ok<0) { printf("gettimeofday error"); }
+	return (tv.tv_sec * 1.0 + tv.tv_usec * 1.0E-6);
+}
 
 // evaluate board
 int evalBoard(const Board &board, Color botColor) {
@@ -46,8 +59,20 @@ int evalBoard(const Board &board, Color botColor) {
             score += (color == botColor) ? value : -value; // add/subtract based on color
         }
     }
-
+    numEvals +=1;
     return score;
+}
+
+
+//randomly chooses capture moves
+Move random(Board &board){
+	Movelist moves;
+	Move move;	
+	movegen::legalmoves<movegen::MoveGenType::CAPTURE>(moves, board); //generate capture moves
+	if (moves.empty())
+		movegen::legalmoves<movegen::MoveGenType::QUIET>(moves, board);
+	move = moves[rand() % moves.size()]; //get rand move
+	return move;
 }
 
 // minimax algorithm
@@ -105,11 +130,15 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
 }
 
 // bot move using minimax
-Move botMove(Board &board, Color botColor, int depth = 3) {
+Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     int alpha = std::numeric_limits<int>::min(); // initial alpha
     int beta = std::numeric_limits<int>::max(); // initial beta
-
+	numEvals = 0;
+	
+	double t0 = get_clock();
     auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta);
+	double t1 = get_clock();
+    printf("time: %f s, numEvals: %d, evals/s: %f\n", t1-t0, numEvals, numEvals/(t1-t0) );
     return bestMove;
 }
 
@@ -123,12 +152,12 @@ Color switchTurn(Color currentTurn) {
 void playChess() {
     // user input
     std::string fen;
-    cout << "Enter computer player color (w=white, b=black): ";
+    cout << "Enter computer player color (w=white, b=black, o=bots play): ";
     char botColorInput;
     cin >> botColorInput;
 
     // color
-    Color botColor = (botColorInput == 'w') ? Color::WHITE : Color::BLACK;
+    Color botColor = (botColorInput == 'w') ? Color::WHITE : Color::BLACK;	//if o/bots play, minimax bot is black, random is white
     Color userColor = (botColor == Color::WHITE) ? Color::BLACK : Color::WHITE;
     Color currentTurn = Color::WHITE;
 
@@ -148,7 +177,11 @@ void playChess() {
         if (currentTurn == botColor) {
             Move botMoveChoice = botMove(board, botColor);
             board.makeMove(botMoveChoice);
-            std::cout << "Bot move: " << uci::moveToUci(botMoveChoice) << std::endl;
+            std::cout << "Minimax bot move: " << uci::moveToUci(botMoveChoice) << std::endl;
+        } else if (botColorInput == 'o') {
+        	Move randomBotMove = random(board);
+        	board.makeMove(randomBotMove);
+        	std::cout << "Random bot move: " << uci::moveToUci(randomBotMove) << std::endl;
         } else {
             cout << "Your move: ";
             string userMoveStr;
