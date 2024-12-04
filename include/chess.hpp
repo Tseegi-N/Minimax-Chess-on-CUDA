@@ -31,7 +31,6 @@ VERSION: 0.6.77
 #ifndef CHESS_HPP
 #define CHESS_HPP
 
-
 #include <functional>
 #include <utility>
 
@@ -61,7 +60,7 @@ VERSION: 0.6.77
 
 namespace chess {
 
-class Color {
+__host__ __device__ class Color {
    public:
     enum class underlying : std::int8_t { WHITE = 0, BLACK = 1, NONE = -1 };
 
@@ -91,7 +90,7 @@ class Color {
         }
     }
 
-    constexpr bool operator==(const Color& rhs) const noexcept { return color == rhs.color; }
+    __host__ __device__ constexpr bool operator==(const Color& rhs) const noexcept { return color == rhs.color; }
     constexpr bool operator!=(const Color& rhs) const noexcept { return color != rhs.color; }
 
     constexpr operator int() const noexcept { return static_cast<int>(color); }
@@ -260,7 +259,7 @@ class Rank {
     underlying rank_;
 };
 
-class Square {
+__host__ __device__ class Square {
    public:
     // clang-format off
     enum class underlying {
@@ -708,7 +707,7 @@ constexpr Bitboard operator|(std::uint64_t lhs, const Bitboard& rhs) { return rh
 }  // namespace chess
 
 namespace chess {
-class Board;
+__host__ __device__ class Board;
 }  // namespace chess
 
 namespace chess {
@@ -967,7 +966,7 @@ constexpr auto MAX_MOVES             = 256;
 
 namespace chess {
 
-class PieceType {
+__host__ __device__ class PieceType {
    public:
     enum class underlying : std::uint8_t {
         PAWN,
@@ -979,9 +978,9 @@ class PieceType {
         NONE,
     };
 
-    constexpr PieceType() : pt(underlying::NONE) {}
-    constexpr PieceType(underlying pt) : pt(pt) {}
-    constexpr explicit PieceType(std::string_view type) : pt(underlying::NONE) {
+    __host__ __device__ constexpr PieceType() : pt(underlying::NONE) {}
+    __host__ __device__ constexpr PieceType(underlying pt) : pt(pt) {}
+    __host__ __device__ constexpr explicit PieceType(std::string_view type) : pt(underlying::NONE) {
         assert(type.size() > 0);
         switch (type.data()[0]) {
             case 'P':
@@ -1070,7 +1069,7 @@ inline std::ostream& operator<<(std::ostream& os, const PieceType& pt) {
     return os;
 }
 
-class Piece {
+__host__ __device__ class Piece {
    public:
     enum class underlying : std::uint8_t {
         WHITEPAWN,
@@ -1094,7 +1093,7 @@ class Piece {
         : piece(color == Color::NONE      ? Piece::NONE
                 : type == PieceType::NONE ? Piece::NONE
                                           : static_cast<underlying>(static_cast<int>(color.internal()) * 6 + type)) {}
-    constexpr Piece(Color color, PieceType type)
+    __host__ __device__ constexpr Piece(Color color, PieceType type)
         : piece(color == Color::NONE      ? Piece::NONE
                 : type == PieceType::NONE ? Piece::NONE
                                           : static_cast<underlying>(static_cast<int>(color.internal()) * 6 + type)) {}
@@ -1145,19 +1144,19 @@ class Piece {
 
     constexpr operator int() const noexcept { return static_cast<int>(piece); }
 
-    [[nodiscard]] constexpr PieceType type() const noexcept {
+    __host__ __device__ [[nodiscard]] constexpr PieceType type() const noexcept {
         if (piece == NONE) return PieceType::NONE;
         // return static_cast<PieceType::underlying>(int(piece) % 6);
         return static_cast<PieceType::underlying>(static_cast<int>(piece) > 5 ? static_cast<int>(piece) - 6
                                                                               : static_cast<int>(piece));
     }
 
-    [[nodiscard]] constexpr Color color() const noexcept {
+    __host__ __device__ [[nodiscard]] constexpr Color color() const noexcept {
         if (piece == NONE) return Color::NONE;
         return static_cast<Color>(static_cast<int>(piece) / 6);
     }
 
-    [[nodiscard]] constexpr underlying internal() const noexcept { return piece; }
+    __host__ __device__ [[nodiscard]] constexpr underlying internal() const noexcept { return piece; }
 
     static constexpr underlying NONE        = underlying::NONE;
     static constexpr underlying WHITEPAWN   = underlying::WHITEPAWN;
@@ -1211,7 +1210,7 @@ class Piece {
 
 namespace chess {
 
-class Move {
+__device__ class Move {
    public:
     Move() = default;
     constexpr Move(std::uint16_t move) : move_(move), score_(0) {}
@@ -1307,7 +1306,7 @@ inline std::ostream &operator<<(std::ostream &os, const Move &move) {
 
 
 namespace chess {
-class Movelist {
+__device__ class Movelist {
    public:
     using value_type      = Move;
     using size_type       = int;
@@ -1754,7 +1753,7 @@ enum class GameResultReason {
 // does not include the half-move clock or full move number.
 using PackedBoard = std::array<std::uint8_t, 24>;
 
-class Board {
+__host__ __device__ class Board {
     using U64 = std::uint64_t;
 
    public:
@@ -2313,7 +2312,7 @@ class Board {
      * @return
      */
     template <typename T = Piece>
-    [[nodiscard]] T at(Square sq) const {
+    __host__ __device__ [[nodiscard]] T at(Square sq) const {
         assert(sq.index() < 64 && sq.index() >= 0);
 
         if constexpr (std::is_same_v<T, PieceType>) {

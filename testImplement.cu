@@ -65,16 +65,42 @@ int evalBoard(const Board &board, Color botColor) {
 }
 
 // eval board on the gpu
-__global__ void evalBoardKernel(int* scores, int* boards, int numMoves, int botColor) {
+__global__ void evalBoardKernel(int* scores, const Board &board, int numMoves, Color botColor) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     if (idx < numMoves) {
         int score = 0;
         // evaluate each piece
-        for (int i = 0; i < 64; ++i) {
-            int piece = boards[idx * 64 + i];
-            if (piece != 0) {
-                int value = (piece > 0) ? pieceMap[piece] : -pieceMap[-piece];
-                score += (piece > 0 && botColor == 1) || (piece < 0 && botColor == -1) ? value : -value;
+        for (int sq = 0; sq < 64; ++sq) { // 64 squares on a chessboard
+            Square square = static_cast<Square>(sq); // convert index to Square
+            Piece piece = board.at(square);          // get the piece at this square
+
+            if (piece.internal() != Piece::NONE) {   // if there's a piece
+                PieceType type = piece.type();       // get the piece type
+                Color color = piece.color();         // get the piece color
+
+                int value;      // piece value
+
+                switch(type) {
+                    case static_cast<int>(chess::PieceType::KING):
+                        value = 0;
+                        break;
+                    case static_cast<int>(chess::PieceType::QUEEN):
+                        value = 9;
+                        break;
+                    case static_cast<int>(chess::PieceType::PAWN):
+                        value = 1;
+                        break;
+                    case static_cast<int>(chess::PieceType::KNIGHT):
+                        value = 3;
+                        break;
+                    case static_cast<int>(chess::PieceType::BISHOP):
+                        value = 3;
+                        break;
+                    case static_cast<int>(chess::PieceType::ROOK):
+                        value = 5;
+                        break;
+                }
+                score += (color == botColor) ? value : -value; // add/subtract based on color
             }
         }
         scores[idx] = score;
@@ -82,8 +108,8 @@ __global__ void evalBoardKernel(int* scores, int* boards, int numMoves, int botC
 }
 
 // prepare evalboard for the gpu
-int evalBoardParallel(const std::vector<Board>& boards, Color botColor) {
-    int numMoves = boards.size();
+int evalBoardParallel(const Board &boards, Color botColor) {
+    int numMoves = 32;
     int* d_scores;
     int* d_boards;
 
@@ -92,12 +118,12 @@ int evalBoardParallel(const std::vector<Board>& boards, Color botColor) {
     cudaMalloc(&d_boards, numMoves * 64 * sizeof(int));
 
     // copy boards to device
-    cudaMemcpy(d_boards, boards.data(), numMoves * 64 * sizeof(int), cudaMemcpyHostToDevice);
+    //cudaMemcpy(d_boards, boards.data(), numMoves * 64 * sizeof(int), cudaMemcpyHostToDevice);
 
     // launch kernel
     int threadsPerBlock = 256;
     int blocksPerGrid = (numMoves + threadsPerBlock - 1) / threadsPerBlock;
-    evalBoardKernel<<<blocksPerGrid, threadsPerBlock>>>(d_scores, d_boards, numMoves, botColor);
+    evalBoardKernel<<<blocksPerGrid, threadsPerBlock>>>(d_scores, boards, numMoves, botColor);
     cudaDeviceSynchronize();
 
     // copy results back
@@ -129,18 +155,7 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
     auto [resultReason, result] = board.isGameOver();
     // base case
     if (depth == 0 || resultReason != GameResultReason::NONE) {
-        // parallelize
-        std::vector<Board> possibleBoards; // store child boards
-        Movelist moves;
-        movegen::legalmoves(moves, board);
-
-        for (const auto& move : moves) {
-            board.makeMove(move);
-            possibleBoards.push_back(board);
-            board.unmakeMove(move);
-        }
-
-        int eval = evalBoardParallel(possibleBoards, botColor);
+        int eval = evalBoardParallel(board, botColor);
         return {eval, Move()};
     }
 
