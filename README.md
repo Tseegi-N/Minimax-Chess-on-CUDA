@@ -1,3 +1,8 @@
+# Implementing Minimax Chessbot on CUDA
+## This is a final team project for CSC 220: Advanced Programming
+
+The project implements a Minimax chessbot using C++ and CUDA, leveraging the SHL chess library for efficient chess functionality. The aim is to optimize the Minimax calculations, originally performed in Python, and parallelize them for enhanced performance. The C++ implementation features recursive Minimax calls and incorporates alpha-beta pruning to improve computational efficiency.
+
 # An extensive SHL Chess Library for C++
 
 [![Chess Library](https://github.com/Disservin/chess-library/actions/workflows/chess-library.yml/badge.svg)](https://github.com/Disservin/chess-library/actions/workflows/chess-library.yml)
