@@ -1749,6 +1749,28 @@ enum class GameResultReason {
     NONE
 };
 
+std::ostream& operator<<(std::ostream& os, GameResult result){
+    switch (result) {
+        case GameResult::WIN: os << "WIN"; break;
+        case GameResult::LOSE: os << "LOSE"; break;
+        case GameResult::DRAW: os << "DRAW"; break;
+        case GameResult::NONE: os << "NONE"; break;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, GameResultReason reason){
+    switch (reason) {
+        case GameResultReason::CHECKMATE: os << "CHECKMATE"; break;
+        case GameResultReason::STALEMATE: os << "STALEMATE"; break;
+        case GameResultReason::INSUFFICIENT_MATERIAL: os << "INSUFFICIENT_MATERIAL"; break;
+        case GameResultReason::FIFTY_MOVE_RULE: os << "FIFTY_MOVE_RULE"; break;
+        case GameResultReason::THREEFOLD_REPETITION: os << "THREEFOLD_REPETITION"; break;
+        case GameResultReason::NONE: os << "NONE"; break;
+    }
+    return os;
+}
+
 // A compact representation of the board in 24 bytes,
 // does not include the half-move clock or full move number.
 using PackedBoard = std::array<std::uint8_t, 24>;

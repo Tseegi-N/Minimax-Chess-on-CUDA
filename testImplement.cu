@@ -210,7 +210,7 @@ Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     int alpha = std::numeric_limits<int>::min(); // initial alpha
     int beta = std::numeric_limits<int>::max(); // initial beta
 	numEvals = 0;
-	
+
 	double t0 = get_clock();
     auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta);
 	double t1 = get_clock();
@@ -277,6 +277,9 @@ void playChess() {
         }
         // check if game is finished
         auto [resultReason, result] = board.isGameOver();
+        std::cout << "GameResultReason: " << resultReason << "\n";
+        std::cout << "GameResult: " << result << "\n";
+        std::cout << "Current Turn: " << currentTurn << "\n";
     }
 
     // if game is over
