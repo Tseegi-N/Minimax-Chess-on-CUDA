@@ -243,10 +243,10 @@ void playChess() {
 
     Board board = (fen.empty()) ? Board() : Board(fen);
 
-    auto [resultReason, result] = board.isGameOver();
+    pair<GameResultReason, GameResult> results_pair = board.isGameOver();
 
     // game loop
-    while (resultReason == GameResultReason::NONE) {
+    while (results_pair.first == GameResultReason::NONE){
         cout << board << endl;
 
         // bot turn
@@ -272,22 +272,22 @@ void playChess() {
             }
         }
         // switch color if game is finished (haven't tested) to display correct color at end
-        if(resultReason == GameResultReason::NONE){
+        if(results_pair.first == GameResultReason::NONE){
             currentTurn = switchTurn(currentTurn);
         }
         // check if game is finished
-        auto [resultReason, result] = board.isGameOver();
-        std::cout << "GameResultReason: " << resultReason << "\n";
-        std::cout << "GameResult: " << result << "\n";
+        results_pair = board.isGameOver();
+        std::cout << "GameResultReason: " << results_pair.first << "\n";
+        std::cout << "GameResult: " << results_pair.second << "\n";
         std::cout << "Current Turn: " << currentTurn << "\n";
     }
 
     // if game is over
-    if (resultReason != GameResultReason::NONE) {
+    if (results_pair.first != GameResultReason::NONE) {
         std::cout << "Game Over: ";
 
         // print the reason for game over
-        switch (resultReason) {
+        switch (results_pair.first) {
             case GameResultReason::CHECKMATE:
                 cout << (currentTurn == botColor ? "You win!" : "Bot wins!") << endl;
                 break;
