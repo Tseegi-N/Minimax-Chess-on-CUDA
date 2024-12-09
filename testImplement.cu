@@ -227,10 +227,10 @@ Color switchTurn(Color currentTurn) {
 // play chess
 void playChess() {
     // user input
-    std::string fen;
-    cout << "Enter computer player color (w=white, b=black, o=bots play): ";
-    char botColorInput;
-    cin >> botColorInput;
+     char botColorInput;
+     std::string fen;
+     cout << "Enter computer player color (w=white, b=black, o=bots play): ";
+     cin >> botColorInput;
 
     // color
     Color botColor = (botColorInput == 'w') ? Color::WHITE : Color::BLACK;	//if o/bots play, minimax bot is black, random is white
@@ -268,7 +268,7 @@ void playChess() {
 
 	            Movelist legal_moves;
 	            movegen::legalmoves(legal_moves,board);
-	            
+
 	            for (int i = 0; i < legal_moves.size(); i++){
 	            	if (legal_moves[i] == userMove){
 	            		tryAgain = false;
