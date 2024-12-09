@@ -27,7 +27,7 @@ int numEvals = 0;
 
 // piece values
 std::unordered_map<chess::PieceType, int> pieceMap = {
-        {chess::PieceType::KING, 0},
+        {chess::PieceType::KING, 9},
         {chess::PieceType::QUEEN, 9},
         {chess::PieceType::PAWN, 1},
         {chess::PieceType::KNIGHT, 3},
@@ -259,17 +259,24 @@ void playChess() {
         	board.makeMove(randomBotMove);
         	std::cout << "Random bot move: " << uci::moveToUci(randomBotMove) << std::endl;
         } else {
-            cout << "Your move: ";
-            string userMoveStr;
-            cin >> userMoveStr;
+        	bool tryAgain = true;
+        	while(tryAgain == true){
+	            cout << "Your move: ";
+	            string userMoveStr;
+	            cin >> userMoveStr;
+	            Move userMove = uci::uciToMove(board, userMoveStr);
 
-            try {
-                // convert str to uci move
-                Move userMove = uci::uciToMove(board, userMoveStr);
-                board.makeMove(userMove);
-            } catch (const std::invalid_argument &e) {
-                cout << "Invalid move. Try again.\n";
-            }
+	            Movelist legal_moves;
+	            movegen::legalmoves(legal_moves,board);
+	            
+	            for (int i = 0; i < legal_moves.size(); i++){
+	            	if (legal_moves[i] == userMove){
+	            		tryAgain = false;
+	            		break;
+	            	}
+	            }
+		       	if (tryAgain == true)	cout << "Invalid move. Try again.\n";
+	        }
         }
         // switch color if game is finished (haven't tested) to display correct color at end
         if(resultReason == GameResultReason::NONE){
