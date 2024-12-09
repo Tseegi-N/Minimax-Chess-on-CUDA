@@ -7,7 +7,7 @@
 #include <sys/time.h>
 #include "include/unmodified.hpp"
 
-#define DEPTH 3
+#define DEPTH 2
 
 // namespace
 using namespace chess;
@@ -33,6 +33,46 @@ std::unordered_map<chess::PieceType, int> pieceMap = {
         {chess::PieceType::BISHOP, 3},
         {chess::PieceType::ROOK, 5}
 };
+
+// Thank you ChatGPT for this part
+struct TreeNode;
+
+// Struct to represent an edge with a label
+struct Edge {
+    TreeNode* child;      // Pointer to the child node
+    std::string label;    // Label for the edge
+
+    Edge(TreeNode* c, const std::string& l) : child(c), label(l) {}
+};
+
+// Struct for the tree node
+struct TreeNode {
+    int value;                          // Value of the node
+    std::vector<Edge> children;         // List of labeled edges
+
+    // Constructor
+    TreeNode(int val) : value(val) {}
+
+    // Add a child with an edge label
+    void addChild(TreeNode* child, const std::string& label) {
+        children.emplace_back(child, label);
+    }
+};
+
+void printTree(TreeNode* node, int depth = 0) {
+    if (!node) return;
+    
+    // Print the current node
+    for (int i = 0; i < depth; ++i) std::cout << "  ";
+    std::cout << "Node " << node->value << std::endl;
+
+    // Print each child with its edge label
+    for (const auto& edge : node->children) {
+        for (int i = 0; i < depth + 1; ++i) std::cout << "  ";
+        std::cout << "Edge label: " << edge.label << std::endl;
+        printTree(edge.child, depth + 2); // Recursive call for the child
+    }
+}
 
 double get_clock(){
 	struct timeval tv; int ok;
@@ -76,10 +116,10 @@ Move random(Board &board){
 }
 
 // minimax algorithm
-pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta) {
-    auto [resultReason, result] = board.isGameOver();
-    // base case
-    if (depth == 0 || resultReason != GameResultReason::NONE) {
+pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta, TreeNode* parent, std::vector<std::string>& boardsList) {
+    pair<GameResultReason, GameResult> results_pair = board.isGameOver();    // base case
+    if (depth == 0 || results_pair.first != GameResultReason::NONE) {
+    	boardsList.push_back(board.getFen());			
         return {evalBoard(board, botColor), Move()};
     }
 
@@ -93,8 +133,10 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
 
         // for all the moves in legal moves
         for (const auto &move : moves) {
+        	TreeNode* child = new TreeNode(0);
+        	parent->addChild(child, uci::moveToUci(move));
             board.makeMove(move);
-            auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta);
+            auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta, child, boardsList);
             board.unmakeMove(move);
 
             if (eval > maxEval) {
@@ -112,8 +154,10 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
         int minEval = numeric_limits<int>::max();
 
         for (const auto &move : moves) {
+            TreeNode* child = new TreeNode(0);
+        	parent->addChild(child, uci::moveToUci(move));
             board.makeMove(move);
-            auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta);
+			auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta, child, boardsList);
             board.unmakeMove(move);
 
             if (eval < minEval) {
@@ -129,16 +173,22 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
     }
 }
 
+
 // bot move using minimax
 Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     int alpha = std::numeric_limits<int>::min(); // initial alpha
     int beta = std::numeric_limits<int>::max(); // initial beta
+    TreeNode* root = new TreeNode(0);
+    std::vector<std::string> boardsList = {};
 	numEvals = 0;
 	
 	double t0 = get_clock();
-    auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta);
+    auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta, root, boardsList);
 	double t1 = get_clock();
     printf("time: %f s, numEvals: %d, evals/s: %f\n", t1-t0, numEvals, numEvals/(t1-t0) );
+	//printTree(root);
+	for (const auto &board : boardsList)
+		cout << board << endl;
     return bestMove;
 }
 
@@ -174,7 +224,7 @@ void playChess() {
     //while (resultReason == GameResultReason::NONE) {
     while (results_pair.first == GameResultReason::NONE){
         cout << board;
-        cout << board.getFen() << endl << endl;
+        cout << "Current FEN: " << board.getFen() << endl << endl;
 		cout << "===================================================================" << endl;
         // bot turn
         if (currentTurn == botColor) {
