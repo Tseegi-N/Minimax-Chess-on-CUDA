@@ -5,10 +5,9 @@
 #include <limits>
 #include <cstdlib> //for random number gen
 #include <sys/time.h>
-#include "include/chess.hpp"
-#include <cuda_runtime.h>
+#include "include/unmodified.hpp"
 
-#define DEPTH 3
+#define DEPTH 2
 
 // namespace
 using namespace chess;
@@ -27,13 +26,53 @@ int numEvals = 0;
 
 // piece values
 std::unordered_map<chess::PieceType, int> pieceMap = {
-        {chess::PieceType::KING, 9},
+        {chess::PieceType::KING, 0},
         {chess::PieceType::QUEEN, 9},
         {chess::PieceType::PAWN, 1},
         {chess::PieceType::KNIGHT, 3},
         {chess::PieceType::BISHOP, 3},
         {chess::PieceType::ROOK, 5}
 };
+
+// Thank you ChatGPT for this part
+struct TreeNode;
+
+// Struct to represent an edge with a label
+struct Edge {
+    TreeNode* child;      // Pointer to the child node
+    std::string label;    // Label for the edge
+
+    Edge(TreeNode* c, const std::string& l) : child(c), label(l) {}
+};
+
+// Struct for the tree node
+struct TreeNode {
+    int value;                          // Value of the node
+    std::vector<Edge> children;         // List of labeled edges
+
+    // Constructor
+    TreeNode(int val) : value(val) {}
+
+    // Add a child with an edge label
+    void addChild(TreeNode* child, const std::string& label) {
+        children.emplace_back(child, label);
+    }
+};
+
+void printTree(TreeNode* node, int depth = 0) {
+    if (!node) return;
+    
+    // Print the current node
+    for (int i = 0; i < depth; ++i) std::cout << "  ";
+    std::cout << "Node " << node->value << std::endl;
+
+    // Print each child with its edge label
+    for (const auto& edge : node->children) {
+        for (int i = 0; i < depth + 1; ++i) std::cout << "  ";
+        std::cout << "Edge label: " << edge.label << std::endl;
+        printTree(edge.child, depth + 2); // Recursive call for the child
+    }
+}
 
 double get_clock(){
 	struct timeval tv; int ok;
@@ -64,85 +103,11 @@ int evalBoard(const Board &board, Color botColor) {
     return score;
 }
 
-// eval board on the gpu
-__global__ void evalBoardKernel(int* scores, const Board &board, int numMoves, Color botColor) {
-    int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    if (idx < numMoves) {
-        int score = 0;
-        // evaluate each piece
-        for (int sq = 0; sq < 64; ++sq) { // 64 squares on a chessboard
-            Square square = static_cast<Square>(sq); // convert index to Square
-            Piece piece = board.at(square);          // get the piece at this square
-
-            if (piece.internal() != Piece::NONE) {   // if there's a piece
-                PieceType type = piece.type();       // get the piece type
-                Color color = piece.color();         // get the piece color
-
-                int value;      // piece value
-
-                switch(type) {
-                    case static_cast<int>(chess::PieceType::KING):
-                        value = 0;
-                        break;
-                    case static_cast<int>(chess::PieceType::QUEEN):
-                        value = 9;
-                        break;
-                    case static_cast<int>(chess::PieceType::PAWN):
-                        value = 1;
-                        break;
-                    case static_cast<int>(chess::PieceType::KNIGHT):
-                        value = 3;
-                        break;
-                    case static_cast<int>(chess::PieceType::BISHOP):
-                        value = 3;
-                        break;
-                    case static_cast<int>(chess::PieceType::ROOK):
-                        value = 5;
-                        break;
-                }
-                score += (color == botColor) ? value : -value; // add/subtract based on color
-            }
-        }
-        scores[idx] = score;
-    }
-}
-
-// prepare evalboard for the gpu
-int evalBoardParallel(const Board &boards, Color botColor) {
-    int numMoves = 32;
-    int* d_scores;
-    int* d_boards;
-
-    // allocate device memory
-    cudaMalloc(&d_scores, numMoves * sizeof(int));
-    cudaMalloc(&d_boards, numMoves * 64 * sizeof(int));
-
-    // copy boards to device
-    //cudaMemcpy(d_boards, boards.data(), numMoves * 64 * sizeof(int), cudaMemcpyHostToDevice);
-
-    // launch kernel
-    int threadsPerBlock = 256;
-    int blocksPerGrid = (numMoves + threadsPerBlock - 1) / threadsPerBlock;
-    evalBoardKernel<<<blocksPerGrid, threadsPerBlock>>>(d_scores, boards, numMoves, botColor);
-    cudaDeviceSynchronize();
-
-    // copy results back
-    std::vector<int> scores(numMoves);
-    cudaMemcpy(scores.data(), d_scores, numMoves * sizeof(int), cudaMemcpyDeviceToHost);
-
-    // free up space
-    cudaFree(d_scores);
-    cudaFree(d_boards);
-
-    // return results
-    return *std::max_element(scores.begin(), scores.end());
-}
-
 
 //randomly chooses capture moves
 Move random(Board &board){
 	Movelist moves;
-	Move move;
+	Move move;	
 	movegen::legalmoves<movegen::MoveGenType::CAPTURE>(moves, board); //generate capture moves
 	if (moves.empty())
 		movegen::legalmoves<movegen::MoveGenType::QUIET>(moves, board);
@@ -151,12 +116,11 @@ Move random(Board &board){
 }
 
 // minimax algorithm
-pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta) {
-    auto [resultReason, result] = board.isGameOver();
-    // base case
-    if (depth == 0 || resultReason != GameResultReason::NONE) {
-        int eval = evalBoardParallel(board, botColor);
-        return {eval, Move()};
+pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta, TreeNode* parent, std::vector<std::string>& boardsList) {
+    pair<GameResultReason, GameResult> results_pair = board.isGameOver();    // base case
+    if (depth == 0 || results_pair.first != GameResultReason::NONE) {
+    	boardsList.push_back(board.getFen());			
+        return {evalBoard(board, botColor), Move()};
     }
 
     // generate move
@@ -169,8 +133,10 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
 
         // for all the moves in legal moves
         for (const auto &move : moves) {
+        	TreeNode* child = new TreeNode(0);
+        	parent->addChild(child, uci::moveToUci(move));
             board.makeMove(move);
-            auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta);
+            auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta, child, boardsList);
             board.unmakeMove(move);
 
             if (eval > maxEval) {
@@ -188,8 +154,10 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
         int minEval = numeric_limits<int>::max();
 
         for (const auto &move : moves) {
+            TreeNode* child = new TreeNode(0);
+        	parent->addChild(child, uci::moveToUci(move));
             board.makeMove(move);
-            auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta);
+			auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta, child, boardsList);
             board.unmakeMove(move);
 
             if (eval < minEval) {
@@ -205,16 +173,22 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
     }
 }
 
+
 // bot move using minimax
 Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     int alpha = std::numeric_limits<int>::min(); // initial alpha
     int beta = std::numeric_limits<int>::max(); // initial beta
+    TreeNode* root = new TreeNode(0);
+    std::vector<std::string> boardsList = {};
 	numEvals = 0;
-
+	
 	double t0 = get_clock();
-    auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta);
+    auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta, root, boardsList);
 	double t1 = get_clock();
     printf("time: %f s, numEvals: %d, evals/s: %f\n", t1-t0, numEvals, numEvals/(t1-t0) );
+	//printTree(root);
+	for (const auto &board : boardsList)
+		cout << board << endl;
     return bestMove;
 }
 
@@ -243,12 +217,15 @@ void playChess() {
 
     Board board = (fen.empty()) ? Board() : Board(fen);
 
+    //auto [resultReason, result] = board.isGameOver();
     pair<GameResultReason, GameResult> results_pair = board.isGameOver();
 
     // game loop
+    //while (resultReason == GameResultReason::NONE) {
     while (results_pair.first == GameResultReason::NONE){
-        cout << board << endl;
-
+        cout << board;
+        cout << "Current FEN: " << board.getFen() << endl << endl;
+		cout << "===================================================================" << endl;
         // bot turn
         if (currentTurn == botColor) {
             Move botMoveChoice = botMove(board, botColor);
@@ -259,24 +236,17 @@ void playChess() {
         	board.makeMove(randomBotMove);
         	std::cout << "Random bot move: " << uci::moveToUci(randomBotMove) << std::endl;
         } else {
-        	bool tryAgain = true;
-        	while(tryAgain == true){
-	            cout << "Your move: ";
-	            string userMoveStr;
-	            cin >> userMoveStr;
-	            Move userMove = uci::uciToMove(board, userMoveStr);
+            cout << "Your move: ";
+            string userMoveStr;
+            cin >> userMoveStr;
 
-	            Movelist legal_moves;
-	            movegen::legalmoves(legal_moves,board);
-	            
-	            for (int i = 0; i < legal_moves.size(); i++){
-	            	if (legal_moves[i] == userMove){
-	            		tryAgain = false;
-	            		break;
-	            	}
-	            }
-		       	if (tryAgain == true)	cout << "Invalid move. Try again.\n";
-	        }
+            try {
+                // convert str to uci move
+                Move userMove = uci::uciToMove(board, userMoveStr);
+                board.makeMove(userMove);
+            } catch (const std::invalid_argument &e) {
+                cout << "Invalid move. Try again.\n";
+            }
         }
         // switch color if game is finished (haven't tested) to display correct color at end
         if(results_pair.first == GameResultReason::NONE){
@@ -286,7 +256,8 @@ void playChess() {
         results_pair = board.isGameOver();
         std::cout << "GameResultReason: " << results_pair.first << "\n";
         std::cout << "GameResult: " << results_pair.second << "\n";
-        std::cout << "Current Turn: " << currentTurn << "\n";
+        std::cout << "Next Turn: " << currentTurn << "\n";
+  
     }
 
     // if game is over
