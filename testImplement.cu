@@ -329,6 +329,7 @@ void playChess() {
 
 	            for (int i = 0; i < legal_moves.size(); i++){
 	            	if (legal_moves[i] == userMove){
+                                board.makeMove(userMove);
 	            		tryAgain = false;
 	            		break;
 	            	}
