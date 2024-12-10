@@ -7,7 +7,7 @@
 #include <sys/time.h>
 #include "include/unmodified.hpp"
 
-#define DEPTH 2
+#define DEPTH 7
 
 // namespace
 using namespace chess;
@@ -231,6 +231,7 @@ void playChess() {
 
     // game loop
     //while (resultReason == GameResultReason::NONE) {
+    int round = 0;
     while (results_pair.first == GameResultReason::NONE){
         cout << board;
         cout << "Current FEN: " << board.getFen() << endl << endl;
@@ -266,7 +267,12 @@ void playChess() {
         std::cout << "GameResultReason: " << results_pair.first << "\n";
         std::cout << "GameResult: " << results_pair.second << "\n";
         std::cout << "Next Turn: " << currentTurn << "\n";
-  
+
+        round +=1;
+        if(round == 4){
+            std::cout << "Game over after 4 rounds: DEMO" << "\n";
+            break;
+        }
     }
 
     // if game is over
