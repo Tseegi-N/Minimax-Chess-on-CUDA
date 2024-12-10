@@ -74,6 +74,13 @@ void printTree(TreeNode* node, int depth = 0) {
     }
 }
 
+// Function to edit the value of a specific node
+void editNodeValue(TreeNode* node, int newValue) {
+    if (!node) return; // Check if the node is valid
+    node->value = newValue; // Update the value of the node
+}
+
+
 double get_clock(){
 	struct timeval tv; int ok;
 	ok = gettimeofday(&tv, (void *) 0);
@@ -138,6 +145,7 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
             board.makeMove(move);
             auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta, child, boardsList);
             board.unmakeMove(move);
+            editNodeValue(child, eval);
 
             if (eval > maxEval) {
                 maxEval = eval;
@@ -159,6 +167,7 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
             board.makeMove(move);
 			auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta, child, boardsList);
             board.unmakeMove(move);
+            editNodeValue(child,eval);
 
             if (eval < minEval) {
                 minEval = eval;
@@ -186,7 +195,7 @@ Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta, root, boardsList);
 	double t1 = get_clock();
     printf("time: %f s, numEvals: %d, evals/s: %f\n", t1-t0, numEvals, numEvals/(t1-t0) );
-	//printTree(root);
+	printTree(root);
 	for (const auto &board : boardsList)
 		cout << board << endl;
     return bestMove;
