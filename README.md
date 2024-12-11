@@ -3,6 +3,47 @@
 
 The project implements a Minimax chessbot using C++ and CUDA, leveraging the SHL chess library for efficient chess functionality. The aim is to optimize the Minimax calculations, originally performed in Python, and parallelize them for enhanced performance. The C++ implementation features recursive Minimax calls and incorporates alpha-beta pruning to improve computational efficiency.
 
+To compile and see the results on CPP, run noCuda.cpp file and call output file.
+```
+g++ noCuda.cpp -o chessCPP -std=c++17
+./chessCPP
+```
+Similarly, run Python file to see minimax chess bot on Python. 
+```
+python chessBot.py
+```
+As for direct CUDA implementation, run the following. 
+```
+nvcc testImplement.cu -o chessTree -std=c++17 --expt-relaxed-constexpr
+./testChess
+```
+
+## What is minimax?
+Minimax is a chess algorithm that we learned about and implemented in Python in CSC 290. It recursively searches through all the possible moves both players could choose to a certain specified depth, and then evaluates all the resulting leaf node game states. The evaluation simply adds up all the pieces on the board with different weights depending on how important the piece is. The values were obtained from https://www.chess.com/terms/chess-piece-value: pawns are 1 point, knights and bishops are 3, rooks are 5, and the queen is 9. Kings are valued at 0 because they cannot be captured. In minimax, both sides' pieces are added up, and opposition color pieces (black or white) have negative points while minimax pieces (e.g. white if opposition is black) have positive points. Once we have the evaluation, we work our way back up the game states tree, where the opposition bot always chooses the optimal move for it: the minimizing move (the move where the evaluation score is lowest) and the minimax bot always chooses the maximizing move (the move where the evaluation score is highest). So this algorithm assumes that both players will choose their best moves available. It doesn't have strategies for getting checkmate except to capture many/valuable pieces. 
+
+## Our setup
+We used the Disservin C++ chess library (https://disservin.github.io/chess-library/) for representing the chess board, getting legal moves, implementing a gameplay function, etc. First we implemented minimax on the CPU with alpha-beta pruning, which decreases the amount of searching the algorithm has to do by not searching branches that the algorithm has already determined to be fruitless. 
+
+A paper has already been published on using the GPU to implement Reversi (Othello) game minimax using CUDA, "Parallel Minimax Tree Searching on GPU" by Kamil Rocki and Reiji Suda. They first ran minimax on the CPU, for a certain depth, saved the leaf node game states, passed those to a kernel where each thread takes a game state and runs a modified version of minimax to several more depths, then returns the best moves and evaluations to the CPU. Then the CPU recursively determines the best move from the evaluations from the GPU. 
+
+We decided to attempt a simplified version of Rocki and Suda's implementation: we would run minimax on the CPU, save the leaf node game states, send those to the GPU, evaluate them all at once in parallel, send the evaluations back to the CPU, and have the CPU perform the minimizing/maximizing part of the algorithm to get the optimal next move. Unfortunately, we ran out of time working on the simplified version and were not able to finish this implementation. Had we been able to successfully implement this simplified version, we would have also tried to implement the more complicated version.
+
+## Runtime analysis
+ We conducted runtime analysis using profilers like, nvidia prof on CUDA direct implementation, gprof on C++, and Python timer functions. Notice that at depth 5, Python exceeds 2 minutes while at depth 7, C++ and CUDA direct implementations are under 10 seconds. See the table below for detailed timestamps.
+
+For better analysis, we made two graphs with the timestamp data from runtime analysis. Y-axis represents runtime in seconds. The figure on the right represents chess bot runtime without any alterations. Python skyrockets after depth 3 due to the overwhelming amount of nodes to evaluate at deeper depths. On the other hand, C++ and CUDA implementations remain low even at depths like 7. The log-scale graph on the left shows that the rates of change between different depths of C++ and CUDA implementations are noticeably lower than Python chess bot. It’s important to note that CUDA implementation runtime remains lower than C++ at all levels of depth, probably due to better keroppi GPU performance compared to our local CPU despite added duration when copying and allocating data into the GPU. 
+
+## Discussion
+We also considered trying to parallelize our minimax on the CPU, but we decided to do it on the GPU because that is what we were more familiar with. Perhaps it would have been easier after all to parallelize on the CPU after (OpenMP and OpenCL were mentioned in class), this way we would have been able to do some recursion in parallel and not have to worry about passing chess-library functions to the GPU or making sure to use CUDA-compatible types on the CPU. But we decided that learning to use C++ and the chess library was enough of a challenge for this project, which brings us to our next point of discussion: we gained experience coding in C++. The namespace syntax took some getting used to, and our learning was accelerated by having to look directly into the chess-library header file to find and use chess-library functions. The chess-library didn't have very good documentation, despite advertising otherwise. 
+
+Further improvements include passing the game states tree to a function that finds the maximum/minimum from the bottom up, so that instead of calling minimax twice, we utilize the tree structure. Finally, this program could also be improved by implementing minimax on the GPU as Rocki and Suda did. This would require us to alter minimax so that instead of recursively calling a minimax function implementing a modified iterative version of the algorithm, which can be parallelized on the GPU without worrying about recursion, which is further discussed in “An analysis of alpha-beta pruning” by Donald E. Knuth,  Ronald W. Moore. 
+
+Overall, despite being unable to finish implementing minimax using the GPU, this project was a good learning experience. We planned our CPU and GPU code, considered different ways of parallelizing minimax, did lots of coding in C++, and got to combine what we learned from CSC 290 and 220. Even the switch to C++ from Python drastically improved runtime, and so did just evaluating the leaf nodes on the GPU as we recursively worked our way through the game states tree on the CPU.
+
+## Citations
+Knuth, D. E., & Moore, R. W. (1975). An analysis of alpha-beta pruning. Artificial intelligence, 6(4), 293-326.
+Rocki, K., & Suda, R. (2009, September). Parallel minimax tree searching on GPU. In International Conference on Parallel Processing and Applied Mathematics (pp. 449-456). Berlin, Heidelberg: Springer Berlin Heidelberg.
+
 # An extensive SHL Chess Library for C++
 
 [![Chess Library](https://github.com/Disservin/chess-library/actions/workflows/chess-library.yml/badge.svg)](https://github.com/Disservin/chess-library/actions/workflows/chess-library.yml)
