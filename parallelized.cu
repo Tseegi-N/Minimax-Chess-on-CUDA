@@ -25,6 +25,7 @@ namespace std {
 using namespace std;
 
 int numEvals = 0;
+int boardsListSize = 0;
 
 // piece values
 std::unordered_map<chess::PieceType, int> pieceMap = {
@@ -89,6 +90,56 @@ double get_clock(){
 	return (tv.tv_sec * 1.0 + tv.tv_usec * 1.0E-6);
 }
 
+//ty chat gpt
+char* createBoardsList(){
+        const int bytesPerString = 92*sizeof(char); // Fixed size for each string
+    int capacity = 100;             // Initial capacity (number of strings)
+    int count = 0;                // Number of strings stored
+
+    // Allocate initial heap memory
+    char* boardsList = (char*)std::malloc(capacity * bytesPerString);
+    return boardsList;
+}
+
+int addToBoardsList(char* fen, char* boardsList){
+            const int bytesPerString = 92*sizeof(char); // Fixed size for each string
+            int capacity = 100;             // Initial capacity (number of strings)
+            int count = 0;                // Number of strings stored
+
+
+        // Check if we need to grow the memory
+        if (count >= capacity) {
+            capacity *= 2; // Double the capacity
+            char* newMemory = (char*)std::realloc(boardsList, capacity * bytesPerString);
+
+            if (!newMemory) {
+                std::cerr << "Failed to reallocate memory!" << std::endl;
+                std::free(boardsList);
+                return 1;
+            }
+            boardsList = newMemory;
+        }
+
+        // Copy the string into the heap memory at the correct offset
+        strncpy(boardsList + count * bytesPerString, fen, bytesPerString);
+
+        // Ensure null-termination
+        boardsList[count * bytesPerString + strlen(fen)] = '\0';
+
+        ++count; // Increment the string count
+
+
+            // Access and print the strings
+            std::cout << "Strings stored in heap memory:" << std::endl;
+            for (int i = 0; i < count; ++i) {
+                std::cout << boardsList + i * bytesPerString << std::endl;
+            }
+
+
+            return capacity*bytesPerString;
+}
+
+
 // evaluate board
 int evalBoard(const Board &board, Color botColor) {
     Color opponentColor = botColor == Color::WHITE ? Color::BLACK : Color::WHITE;
@@ -112,11 +163,11 @@ int evalBoard(const Board &board, Color botColor) {
 }
 
 // eval board on the gpu
-__global__ void evalBoardKernel(int* d_scores, std::vector<std::string> d_boardsList, int bl_size, Color botColor) {
+__global__ void evalBoardKernel(int* d_scores, char* d_boardsList, int numBoards, Color botColor) {
     int gindex = threadIdx.x + blockIdx.x * blockDim.x;
-    if (gindex < bl_size) {
+    if (gindex < numBoards) {
         int score = 0;
-        #if 0
+        //#if 0
         // evaluate each piece
         for (int sq = 0; sq < 64; ++sq) { // 64 squares on a chessboard
             Square square = static_cast<Square>(sq); // convert index to Square
@@ -151,52 +202,44 @@ __global__ void evalBoardKernel(int* d_scores, std::vector<std::string> d_boards
                 score += (color == botColor) ? value : -value; // add/subtract based on color
             }
         }
-        #endif
+        //#endif
         d_scores[gindex] = score;
     }
 }
 
 // prepare evalboard for the gpu
-int evalBoardParallel(std::vector<std::string> boardsList, Color botColor) {
+int evalBoardParallel(char* boardsList, Color botColor, int boardsListSize) {
     int* d_scores;
-    ___* d_boardsList;
-    int* bl_size; //just the number of items in boardsList for device so we don't have to call CPU size function(?)
-
-    std::size_t vectorOverhead = boardsList.capacity() * sizeof(std::string);
-    std::size_t totalStringSize = 0;
-    for (const auto& str : boardsList) {
-        totalStringSize += str.capacity(); // Capacity of the string (heap allocation)
-    }
-    std::size_t boardsList_size = vectorOverhead + totalStringSize;
-    cout << "BOARDS LIST SIZE BYTES " << boardsList_size << " items " << boardsList.size() << endl;
+    char* d_boardsList;
+    int numBoards = boardsListSize/sizeof(char)/92;
 
     // allocate device memory
-    cudaMalloc(&d_scores, boardsList.size()*sizeof(int));
-    cudaMalloc(&d_boardsList, boardsList_size);
+    cudaMalloc(&d_scores, numBoards*sizeof(int));
+    cudaMalloc(&d_boardsList, boardsListSize);
  
 
     // copy boards to device
-    cudaMemcpy(d_boardsList, boardsList, boardsList_size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_boardsList, boardsList, boardsListSize, cudaMemcpyHostToDevice);
 
     // launch kernel
     int threadsPerBlock = 256;
-    int numBlocks = ceil((1.0*boardsList.size())/threadsPerBlock);
+    int numBlocks = ceil(1.0*numBoards/threadsPerBlock);
     //int blocksPerGrid = (numMoves + threadsPerBlock - 1) / threadsPerBlock;
-    evalBoardKernel<<<numBlocks, threadsPerBlock>>>(d_scores, d_boardsList, boardsList.size(), botColor);
+    evalBoardKernel<<<numBlocks, threadsPerBlock>>>(d_scores, d_boardsList, numBoards, botColor);
     cudaDeviceSynchronize();
 
     // copy results back
-    std::vector<int> scores(boardsList.size());
-    cudaMemcpy(scores.data(), d_scores, boardsList.size() * sizeof(int), cudaMemcpyDeviceToHost);
+    std::vector<int> scores(numBoards);
+    cudaMemcpy(scores.data(), d_scores, numBoards * sizeof(int), cudaMemcpyDeviceToHost);
 
     // free up space
     cudaFree(d_scores);
     cudaFree(d_boardsList);
 
-    // return results
+    return scores
     //return *std::max_element(scores.begin(), scores.end());
     //#endif
-    return 0;
+    //return 0;
 }
 
 
@@ -212,10 +255,13 @@ Move random(Board &board){
 }
 
 // minimax algorithm
-pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta, TreeNode* parent, std::vector<std::string>& boardsList) {
+pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta, TreeNode* parent, char* boardsList) {
     pair<GameResultReason, GameResult> results_pair = board.isGameOver();    // base case
     if (depth == 0 || results_pair.first != GameResultReason::NONE) {
-        boardsList.push_back(board.getFen());
+        std::string fenString = board.getFen();
+        char * fen = new char[fenString.length() + 1];
+        strcpy(fen, fenString.c_str());
+        boardsListSize = addToBoardsList(fen, boardsList);
         return {evalBoard(board, botColor), Move()};
     }
 
@@ -270,12 +316,14 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
     }
 }
 
+
+
 // bot move using minimax
 Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     int alpha = std::numeric_limits<int>::min(); // initial alpha
     int beta = std::numeric_limits<int>::max(); // initial beta
     TreeNode* root = new TreeNode(0);
-    std::vector<std::string> boardsList = {};
+    char* boardsList = createBoardsList();
 	numEvals = 0;
 
 	double t0 = get_clock();
@@ -284,10 +332,12 @@ Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     printf("time: %f s, numEvals: %d, evals/s: %f\n", t1-t0, numEvals, numEvals/(t1-t0) );
 	if(PRINT_TREE_AND_BOARD_NODES) {
 	printTree(root);
-	for (const auto &board : boardsList)
-		cout << board << endl;
+	//for (const auto &board : boardsList)
+	//	cout << board << endl;
 	}
-	evalBoardParallel(boardsList, botColor);
+	evalBoardParallel(boardsList, botColor, boardsListSize);
+	std::free(boardsList);
+	
     return bestMove;
 }
 
