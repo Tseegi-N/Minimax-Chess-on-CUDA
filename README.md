@@ -30,8 +30,13 @@ We decided to attempt a simplified version of Rocki and Suda's implementation: w
 
 ## Runtime analysis
  We conducted runtime analysis using profilers like, nvidia prof on CUDA direct implementation, gprof on C++, and Python timer functions. Notice that at depth 5, Python exceeds 2 minutes while at depth 7, C++ and CUDA direct implementations are under 10 seconds. See the table below for detailed timestamps.
+ 
+ ![Table of Runtime](graphs/Screenshot 2024-12-11 110235.png)
 
 For better analysis, we made two graphs with the timestamp data from runtime analysis. Y-axis represents runtime in seconds. The figure on the right represents chess bot runtime without any alterations. Python skyrockets after depth 3 due to the overwhelming amount of nodes to evaluate at deeper depths. On the other hand, C++ and CUDA implementations remain low even at depths like 7. The log-scale graph on the left shows that the rates of change between different depths of C++ and CUDA implementations are noticeably lower than Python chess bot. It’s important to note that CUDA implementation runtime remains lower than C++ at all levels of depth, probably due to better keroppi GPU performance compared to our local CPU despite added duration when copying and allocating data into the GPU. 
+
+![Graph Normal](graphs/Minimax Chessbot Runtime.png)
+![Graph Log-scale](graphs/Minimax Chessbot Runtime (Log-scale).png)
 
 ## Discussion
 We also considered trying to parallelize our minimax on the CPU, but we decided to do it on the GPU because that is what we were more familiar with. Perhaps it would have been easier after all to parallelize on the CPU after (OpenMP and OpenCL were mentioned in class), this way we would have been able to do some recursion in parallel and not have to worry about passing chess-library functions to the GPU or making sure to use CUDA-compatible types on the CPU. But we decided that learning to use C++ and the chess library was enough of a challenge for this project, which brings us to our next point of discussion: we gained experience coding in C++. The namespace syntax took some getting used to, and our learning was accelerated by having to look directly into the chess-library header file to find and use chess-library functions. The chess-library didn't have very good documentation, despite advertising otherwise. 
