@@ -165,9 +165,18 @@ int evalBoard(const Board &board, Color botColor) {
 // eval board on the gpu
 __global__ void evalBoardKernel(int* d_scores, char* d_boardsList, int numBoards, Color botColor) {
     int gindex = threadIdx.x + blockIdx.x * blockDim.x;
-    if (gindex < numBoards) {
+    if (gindex < 10) {
         int score = 0;
-        //#if 0
+        char * fen = d_boardsList + gindex*92;
+		printf("YES QORKING");
+		for (int i = 0; i < 92; i++){
+			printf("in for loop %d ", i);
+		
+			printf(" FEN %c", d_boardsList[i]);
+		}
+		printf("\n");
+        #if 0
+        Board board = Board(fen);
         // evaluate each piece
         for (int sq = 0; sq < 64; ++sq) { // 64 squares on a chessboard
             Square square = static_cast<Square>(sq); // convert index to Square
@@ -202,13 +211,14 @@ __global__ void evalBoardKernel(int* d_scores, char* d_boardsList, int numBoards
                 score += (color == botColor) ? value : -value; // add/subtract based on color
             }
         }
+        #endif
         //#endif
         d_scores[gindex] = score;
     }
 }
 
 // prepare evalboard for the gpu
-int evalBoardParallel(char* boardsList, Color botColor, int boardsListSize) {
+int* evalBoardParallel(char* boardsList, Color botColor, int boardsListSize) {
     int* d_scores;
     char* d_boardsList;
     int numBoards = boardsListSize/sizeof(char)/92;
@@ -229,14 +239,14 @@ int evalBoardParallel(char* boardsList, Color botColor, int boardsListSize) {
     cudaDeviceSynchronize();
 
     // copy results back
-    std::vector<int> scores(numBoards);
-    cudaMemcpy(scores.data(), d_scores, numBoards * sizeof(int), cudaMemcpyDeviceToHost);
+    int* scores = new int[numBoards];
+    cudaMemcpy(scores, d_scores, numBoards * sizeof(int), cudaMemcpyDeviceToHost);
 
     // free up space
     cudaFree(d_scores);
     cudaFree(d_boardsList);
 
-    return scores
+    return scores;
     //return *std::max_element(scores.begin(), scores.end());
     //#endif
     //return 0;
@@ -255,14 +265,18 @@ Move random(Board &board){
 }
 
 // minimax algorithm
-pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta, TreeNode* parent, char* boardsList) {
+pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botColor, int alpha, int beta, TreeNode* parent, char* boardsList, bool isSecond, int* scores, int scoresIndex) {
     pair<GameResultReason, GameResult> results_pair = board.isGameOver();    // base case
     if (depth == 0 || results_pair.first != GameResultReason::NONE) {
+    	if (isSecond) {
+    		scoresIndex++;
+    		return {scores[scoresIndex], Move()};
+    	}
         std::string fenString = board.getFen();
         char * fen = new char[fenString.length() + 1];
         strcpy(fen, fenString.c_str());
         boardsListSize = addToBoardsList(fen, boardsList);
-        return {evalBoard(board, botColor), Move()};
+        return {0, Move()};
     }
 
     // generate move
@@ -278,7 +292,8 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
         	TreeNode* child = new TreeNode(0);
         	parent->addChild(child, uci::moveToUci(move));
             board.makeMove(move);
-            auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta, child, boardsList);
+            //auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta, child, boardsList, isSecond, scores, scoresIndex);
+            auto [eval, _] = minimax(board, depth - 1, false, botColor, alpha, beta, child, boardsList, isSecond, scores, scoresIndex);
             board.unmakeMove(move);
             editNodeValue(child, eval);
 
@@ -300,7 +315,7 @@ pair<int, Move> minimax(Board &board, int depth, bool isMaximizing, Color botCol
         	TreeNode* child = new TreeNode(0);
         	parent->addChild(child, uci::moveToUci(move));
             board.makeMove(move);
-            auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta, child, boardsList);
+            auto [eval, _] = minimax(board, depth - 1, true, botColor, alpha, beta, child, boardsList, isSecond, scores, scoresIndex);
             board.unmakeMove(move);
 			editNodeValue(child, eval);
             if (eval < minEval) {
@@ -325,19 +340,20 @@ Move botMove(Board &board, Color botColor, int depth = DEPTH) {
     TreeNode* root = new TreeNode(0);
     char* boardsList = createBoardsList();
 	numEvals = 0;
+	int* scores = new int[0];
 
 	double t0 = get_clock();
-    auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta, root, boardsList);
+    minimax(board, depth, true, botColor, alpha, beta, root, boardsList, false, scores, -1);
 	double t1 = get_clock();
     printf("time: %f s, numEvals: %d, evals/s: %f\n", t1-t0, numEvals, numEvals/(t1-t0) );
 	if(PRINT_TREE_AND_BOARD_NODES) {
-	printTree(root);
-	//for (const auto &board : boardsList)
-	//	cout << board << endl;
+		printTree(root);
+		//for (const auto &board : boardsList)
+		//	cout << board << endl;
 	}
-	evalBoardParallel(boardsList, botColor, boardsListSize);
+	scores = evalBoardParallel(boardsList, botColor, boardsListSize);
 	std::free(boardsList);
-	
+	auto [_, bestMove] = minimax(board, depth, true, botColor, alpha, beta, root, boardsList, true, scores, -1);
     return bestMove;
 }
 
